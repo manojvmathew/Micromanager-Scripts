@@ -1,0 +1,218 @@
+gui.refreshGUI();
+gui.refreshGUIFromCache();
+gui.closeAllAcquisitions();
+gui.clearMessageWindow();
+
+import ij.*;
+import ij.process.*;
+import ij.gui.*;
+import java.awt.*;
+import ij.plugin.*;
+import ij.plugin.frame.*;
+import ij.io.FileSaver;
+import org.micromanager.utils.ImageUtils;
+import ij.process.ImageProcessor;
+import ij.ImagePlus;
+import java.awt.*;
+import java.awt.event.*;
+import javax.swing.*;
+import ij.io.DirectoryChooser;
+import mmc;
+import org.micromanager.navigation.PositionList;
+import org.micromanager.navigation.MultiStagePosition;
+import ij.gui.ShapeRoi;
+import ij.plugin.frame.RoiManager;
+
+//*************Choose Directory***************************
+
+DirectoryChooser dr = new DirectoryChooser("Choose the Directory to Save Tiles");
+dr.setDefaultDirectory("D:\temp");
+acqRoot = dr.getDirectory();
+SampleRoot1 = acqRoot ;
+print("image:"+SampleRoot1);
+
+
+//************Set Camera and Microscope Parameters****************
+
+Obj=30; //Enter Objective Magnification, if you use an intemediate magnification multiply that value with obj mag
+print("Objective="+ String.valueOf(Obj)+"x");
+
+CamRow=2048; //Enter the no: of rows of pixels in the camera chip
+print("No: of Camera Rows="+ String.valueOf(CamRow));
+
+CamClmn=2048; //Enter the no: of columns of pixels in the camera chip
+print("No: of Camera Columns="+ String.valueOf(CamClmn));
+
+CamPix=6.5; //Enter the pixel size of camera chip
+print("Camera Pixel Size="+ String.valueOf(CamPix)+"um");
+
+OvrLap=20; //Enter the percntage overlap between tiles required in percentage
+print("Percentage Overlap Between Tiles="+ String.valueOf(OvrLap)+"%");
+
+//******Compute the size of each tile*****************
+OvrLap=OvrLap/100;
+
+CamSizeX=CamRow*CamPix/Obj;
+CamSizeY=CamClmn*CamPix/Obj;
+
+SizeX=CamSizeX*(1-OvrLap);
+print("Sixe of Tile X="+ String.valueOf(SizeX));
+SizeY=CamSizeY*(1-OvrLap);
+print("Sixe of Tile Y="+ String.valueOf(SizeY));
+
+
+numRows=1;
+numColumns=1;
+
+delayBetweenPicsMs=0;
+
+zstage = mmc.getFocusDevice();
+gui.enableLiveMode(true);
+IJ.getInstance().setAlwaysOnTop(true);
+
+//*****Move the stage to bottom Right and click OK*********************************
+
+new WaitForUserDialog("Move Stage to Bottom Right and Adjust the Focus Position").show();
+ImagePlus imp = IJ.getImage();
+
+BtRht=gui.getXYStagePosition();
+ZBtRght=gg=mmc.getPosition(zstage);
+X2=BtRht.x;
+Y2=BtRht.y;
+
+//*****Move the stage to Top Right and click OK*********************************
+
+new WaitForUserDialog("Move Stage to Top Right and Adjust the Focus Position").show();
+ImagePlus imp = IJ.getImage();
+ZTpRgt=gg=mmc.getPosition(zstage);
+
+//*****Move the stage to Top Left and click OK*********************************
+
+new WaitForUserDialog("Move Stage to Top Left and Adjust the Focus Position").show();
+ImagePlus imp = IJ.getImage();
+
+ZTpLft=gg=mmc.getPosition(zstage);
+TpLft=gui.getXYStagePosition();
+X1=TpLft.x;
+Y1=TpLft.y;
+
+
+
+//******Compute the Number of Rows and Number of Columns of tiles*****************
+
+ZX=ZTpRgt-ZTpLft;
+ZY=ZBtRght-ZTpRgt;
+
+X=X2-X1;
+Y=Y2-Y1;
+
+numColumns=Math.round(X/SizeX);
+numRows=Math.round(Y/SizeY);
+
+numColumns=Math.abs(numColumns);
+numRows=Math.abs(numRows);
+
+numColumns=numColumns+1;
+numRows=numRows+1;
+TotTiles=numColumns*numRows;
+
+print("Number of Colums ="+ numColumns);
+print("Number of Rows =" + numRows);
+
+//******Compute the Z offsets in X and Y dimentions *****************
+
+dZX=ZX/numColumns;
+dZY=ZY/numRows;
+
+print(dZX);
+print(dZY);
+
+//******Compute Move stage the first tile at top left corner of the ROI*****************
+
+gui.setXYStagePosition(X1,Y1);
+q=gui.getXYStagePosition();
+
+Zz=mmc.getPosition(zstage);
+Zz1=Zz;
+
+qx=q.x;
+qy=q.y;
+qx1=qx;
+qy=q.y;
+qy1=qy;
+print(q);
+print(q.x);
+print(qy);
+count=1;
+
+//******Tile Scan Acquisition********************************************************
+
+gui.enableLiveMode(false);
+
+for( i = 1; i <= numRows; i++ )
+	{
+
+for(j=1; j<= numColumns; j++)
+	{
+		
+        timeStartCurrentLoop = System.currentTimeMillis();
+         gui.setXYStagePosition(qx1,qy1);
+         mmc.setPosition(zstage, Zz1);
+       
+     
+        //take a picture
+        mmc.snapImage();
+        //gui.sleep(50);
+
+        //saving
+        Object img = mmc.getImage();
+        proc0 = ImageUtils.makeProcessor(mmc, img);
+        ImagePlus imgp0 = new ImagePlus("",proc0);
+        FileSaver fs =  new FileSaver(imgp0);
+        strDirectory = SampleRoot1;
+        fs.saveAsTiff(strDirectory + "/" + String.valueOf(count) + ".tif");
+
+       // gui.message("Image: " + String.valueOf(picNum) );
+      
+       qtestXY=gui.getXYStagePosition();
+       print("Current Stage Position="+qtestXY);
+       qtestZ=mmc.getPosition(zstage);
+       print("Current Z Position="+qtestZ);
+
+        while ( (System.currentTimeMillis() - timeStartCurrentLoop) < delayBetweenPicsMs )
+        {
+                gui.sleep(50);
+        }
+        //picNum = picNum + 1;
+
+        qx1=qx1-SizeX;
+		  Zz1=Zz1+dZX;
+		 
+		  print("Tile No: " + count +" of " + TotTiles + " (" + numColumns + "X" + numRows + ")"+ " Tiles ");
+        count=count+1;
+        
+        
+	}
+
+
+qy1=qy1-SizeY;
+
+
+
+qx1=qx1+((numColumns/4)*SizeX);
+gui.setXYStagePosition(qx1,qy1);
+qx1=qx1+((numColumns/4)*SizeX);
+gui.setXYStagePosition(qx1,qy1);
+qx1=qx1+((numColumns/4)*SizeX);
+gui.setXYStagePosition(qx1,qy1);
+qx1=qx;
+gui.setXYStagePosition(qx1,qy1);
+Zz1=Zz;
+Zz1=Zz1+(dZY*i);
+
+}
+
+gui.setXYStagePosition(qx,qy);
+
+print("Tile Scan Acquisition of "+ String.valueOf(numColumns)+"X"+String.valueOf(numRows)+" tiles is complete");
+
